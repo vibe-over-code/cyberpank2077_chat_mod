@@ -4,7 +4,7 @@ import time
 
 # --- КОНФИГУРАЦИЯ ---
 # Будем использовать один и тот же файл для хранения и управления
-DIALOG_MAP_FILE = r"F:\Cyberpunk 2077\r6\scripts\Chatai\dialog_map.json" 
+DIALOG_MAP_FILE = r"F:\Cyberpunk 2077\r6\storages\Chatai\dialog_map.json" 
 # --------------------
 
 def create_static_dialog_map():
