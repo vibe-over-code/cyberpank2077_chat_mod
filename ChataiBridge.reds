@@ -17,6 +17,12 @@ public class ChataiStorage extends ScriptableSystem {
     private let answers: array<String>;
     private let m_isUnread: Bool; // ФИКС 1: статус непрочитанного
 
+    public func OnAttach() -> Void {
+        // инициализация массивов — ТАК ПРАВИЛЬНО
+        ArrayClear(this.replies);
+        ArrayClear(this.answers);
+    }
+
     public func SetNpcText(text: String) -> Void {
         this.npcText = text;
     }

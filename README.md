@@ -1,8 +1,6 @@
-ad ai replics for your favourite npc
+ad ai replics for adv
 
 Installation
 
-1) install redfilesystem
-2) install redData
-3) install phone extensions
-4) add to r6\storage\Chatai\ file dialog_map.json
+1. install phone extensions
+2. add to cet\\mods\\chatai file dialog\_map.json
