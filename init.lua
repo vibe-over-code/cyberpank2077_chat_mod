@@ -23,7 +23,7 @@ end
 
 
 --------------------------------------------------------------------
--- JSON DECODER (СТАБИЛЬНЫЙ, РАБОТАЕТ СО ВСЕМИ GPT ВЫВОДАМИ)
+-- JSON DECODER
 --------------------------------------------------------------------
 local function json_decode(str)
     str = extract_json_block(str)
@@ -152,12 +152,13 @@ end
 
 
 --------------------------------------------------------------------
--- Получение ChataiPhone.ChataiStorage (твоя redscript система)
+-- Получение ChataiPhone.ChataiStorage
 --------------------------------------------------------------------
 local function getStorage()
     local cont = Game.GetScriptableSystemsContainer()
     if not cont then return nil end
-    return cont:Get("ChataiPhone.ChataiStorage")
+    -- Используем CName.new для надежности в новых версиях CET
+    return cont:Get(CName.new("ChataiPhone.ChataiStorage"))
 end
 
 
@@ -178,13 +179,14 @@ local function sendToStorage(raw)
         return false
     end
 
-    -- NPC TEXT
-    local npcText = data.npc_text or "Новое сообщение."
+    -- 1. Установка текста NPC
+    local npcText = data.npc_text or "..."
     storage:SetNpcText(npcText)
 
+    -- 2. Очистка старых ответов
     storage:ClearReplies()
 
-    -- REPLIES
+    -- 3. Заполнение вариантов ответов (кнопок)
     if data.replies then
         for _, r in ipairs(data.replies) do
             if r.id and r.text then
@@ -193,7 +195,7 @@ local function sendToStorage(raw)
         end
     end
 
-    -- ANSWERS
+    -- 4. Заполнение базы ответов NPC (реакций)
     if data.answers then
         for idstr, text in pairs(data.answers) do
             local id = tonumber(idstr)
@@ -203,23 +205,15 @@ local function sendToStorage(raw)
         end
     end
 
-    storage:SetUnread(true)
-    print("[CHATAI] JSON delivered → phone storage")
+    print("[CHATAI] Data synced with Redscript.")
 
-    -- Push notification to phone
-    local game = Game.GetGame()
-    if not game then return true end
-
-    local player = Game.GetPlayer(game)
-    if not player then return true end
-
-    local contact = player:GetPhoneExtensionSystem():GetListener(76543210)
-    if contact then
-        contact:SendNotification(npcText)
-        print("[CHATAI] Notification sent.")
-    else
-        print("[CHATAI] Contact not found yet.")
-    end
+    -- 5. ОТПРАВКА УВЕДОМЛЕНИЯ
+    -- Мы вызываем метод TriggerNotification, который я добавил в Redscript.
+    -- Он сам найдет PhoneExtensionSystem и покажет уведомление.
+    -- Аргументы: "Заголовок/Имя", "Текст превью"
+    
+    storage:TriggerNotification("Chatai JSON", npcText)
+    print("[CHATAI] Notification triggered via Storage.")
 
     return true
 end
@@ -230,6 +224,7 @@ end
 -- onUpdate: читаем JSON файл, обновляем телефон
 --------------------------------------------------------------------
 registerForEvent("onUpdate", function(delta)
+    -- Проверка доступности хранилища (загрузился ли сейв)
     if not storageReady then
         local s = getStorage()
         if s then
@@ -243,13 +238,15 @@ registerForEvent("onUpdate", function(delta)
         end
     end
 
+    -- Чтение файла
     local f = io.open(json_path, "r")
     if not f then return end
     local raw = f:read("*a")
     f:close()
 
+    -- Если файл изменился
     if raw and raw ~= "" and raw ~= lastJson then
-        print("[CHATAI] JSON updated.")
+        print("[CHATAI] JSON file updated.")
         lastJson = raw
 
         if storageReady then
