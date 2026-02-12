@@ -13,6 +13,7 @@ public class ReplyData {
 
 public class ChataiStorage extends ScriptableSystem {
     private let npcText: String;
+    private let m_corpName: String; // <--- НОВОЕ ПОЛЕ: Название корпорации/контакта
     private let replies: array<ref<ReplyData>>;
     private let answers: array<String>;
     private let m_isUnread: Bool;
@@ -20,9 +21,15 @@ public class ChataiStorage extends ScriptableSystem {
     public func OnAttach() -> Void {
         ArrayClear(this.replies);
         ArrayClear(this.answers);
+        this.m_corpName = "Chatai JSON"; // Инициализация по умолчанию
     }
 
     // --- МЕТОДЫ ДЛЯ LUA ---
+
+    // НОВЫЙ СЕТТЕР ДЛЯ ИМЕНИ КОНТАКТА
+    public func SetCorpName(name: String) -> Void {
+        this.m_corpName = name;
+    }
 
     // 1. Установка текста NPC
     public func SetNpcText(text: String) -> Void {
@@ -63,20 +70,23 @@ public class ChataiStorage extends ScriptableSystem {
         return this.m_isUnread;
     }
 
-    // 6. ИСПРАВЛЕНИЕ: Метод для вызова уведомления (вызывать из Lua!)
+    // 6. Метод для вызова уведомления (вызывать из Lua!)
     public func TriggerNotification(title: String, text: String) -> Void {
         let player = GameInstance.GetPlayerSystem(this.GetGameInstance()).GetLocalPlayerMainGameObject();
         if IsDefined(player) {
             let syst = PhoneExtensionSystem.GetInstance(player);
-            // 76543210 - это Хеш вашего контакта (совпадает с ChataiPhoneContact)
+            // Используем title, переданный из Lua
             syst.NotifyNewMessageCustom(76543210, title, text); 
-            
-            // Автоматически ставим статус "непрочитано", если пришло уведомление
             this.SetUnread(true);
         }
     }
 
     // --- ГЕТТЕРЫ ---
+
+    // НОВЫЙ ГЕТТЕР ДЛЯ ИМЕНИ КОНТАКТА
+    public func GetCorpName() -> String {
+        return this.m_corpName;
+    }
 
     public func GetNpcText() -> String {
         if StrLen(this.npcText) == 0 {
@@ -111,8 +121,17 @@ public class ChataiPhoneContact extends PhoneEventsListener {
     // Уникальный хеш контакта
     public func GetContactHash() -> Int32 = 76543210
     
-    // Имя контакта
-    public func GetContactLocalizedName() -> String = "Chatai JSON"
+    // ИСПРАВЛЕНИЕ: Теперь это динамический геттер, который берет имя из хранилища
+    public func GetContactLocalizedName() -> String {
+        let storage = GameInstance
+            .GetScriptableSystemsContainer(this.m_player.GetGame())
+            .Get(n"ChataiPhone.ChataiStorage") as ChataiStorage;
+        
+        if IsDefined(storage) {
+            return storage.GetCorpName();
+        }
+        return "Chatai JSON"; // Fallback
+    }
 
     public func GetContactData(isText: Bool) -> ref<ContactData> {
         let c = new ContactData();
@@ -120,27 +139,28 @@ public class ChataiPhoneContact extends PhoneEventsListener {
             .GetScriptableSystemsContainer(this.m_player.GetGame())
             .Get(n"ChataiPhone.ChataiStorage") as ChataiStorage;
 
+        let contactName = this.GetContactLocalizedName(); // <--- ИСПОЛЬЗУЕМ ДИНАМИЧЕСКОЕ ИМЯ
+
         c.hash = this.GetContactHash();
-        c.localizedName = this.GetContactLocalizedName();
+        c.localizedName = contactName; // <--- ИСПОЛЬЗУЕМ ДИНАМИЧЕСКОЕ ИМЯ
         c.contactId = s"ChataiContact";
         c.id = s"CHAT";
-        c.avatarID = t"PhoneAvatars.Avatar_Unknown"; // Можно сменить аватарку здесь
+        c.avatarID = t"PhoneAvatars.Avatar_Unknown";
         
         // Для текстовых сообщений
         if isText {
             c.type = MessengerContactType.SingleThread;
             c.lastMesssagePreview = storage.GetNpcText();
             
-            // ИСПРАВЛЕНИЕ НЕПРОЧИТАННЫХ СООБЩЕНИЙ
-            // Важно правильно заполнить массив unreadMessages
+            // Логика непрочитанных сообщений
             ArrayClear(c.unreadMessages);
             if storage.IsUnread() {
                 c.unreadMessegeCount = 1;
-                ArrayPush(c.unreadMessages, 1); // ID сообщения (фиктивный, но нужен)
+                ArrayPush(c.unreadMessages, 1); 
                 c.playerIsLastSender = false;
             } else {
                 c.unreadMessegeCount = 0;
-                c.playerIsLastSender = true; // Трюк: если игрок последний, сообщение считается прочитанным
+                c.playerIsLastSender = true;
             }
         } else {
             c.type = MessengerContactType.Contact;
@@ -160,18 +180,19 @@ public class ChataiPhoneContact extends PhoneEventsListener {
             .GetScriptableSystemsContainer(this.m_player.GetGame())
             .Get(n"ChataiPhone.ChataiStorage") as ChataiStorage;
 
-        // Как только открыли диалог - снимаем флаг непрочитанного
+        // Снимаем флаг непрочитанного
         if storage.IsUnread() {
             storage.SetUnread(false);
         }
 
         let textToShow = storage.GetNpcText();
+        let contactName = this.GetContactLocalizedName(); // <--- ИСПОЛЬЗУЕМ ДИНАМИЧЕСКОЕ ИМЯ
 
         // Показываем сообщение NPC
         ctrl.PushMessageCustom(
             textToShow,
             MessageViewType.Received,
-            this.GetContactLocalizedName(),
+            contactName, // <--- ИСПОЛЬЗУЕМ ДИНАМИЧЕСКОЕ ИМЯ
             false
         );
 
@@ -193,8 +214,8 @@ public class ChataiPhoneContact extends PhoneEventsListener {
             this.m_messengerController.PushReplyCustom(
                 reply.id,
                 reply.text,
-                false, // isQuest
-                true,  // isSelected
+                false, 
+                true,  
                 this.m_messengerController.m_hasFocus
             );
         }
@@ -223,13 +244,10 @@ public class ChataiPhoneContact extends PhoneEventsListener {
         let botAnswer = storage.GetAnswer(messageID);
         this.PushBotMessage(botAnswer);
 
-        // 3. Обновляем текст в хранилище, чтобы он отображался при следующем открытии
+        // 3. Обновляем текст в хранилище
         storage.SetNpcText(botAnswer);
         
-        // Очищаем ответы, так как диалог завершен на этом этапе
         storage.ClearReplies();
-        
-        // Важно: Сообщение прочитано, так как мы только что ответили
         storage.SetUnread(false);
     }
 
@@ -246,7 +264,7 @@ public class ChataiPhoneContact extends PhoneEventsListener {
         this.m_messengerController.PushMessageCustom(
             msg,
             MessageViewType.Received,
-            this.GetContactLocalizedName(),
+            this.GetContactLocalizedName(), // <--- ИСПОЛЬЗУЕМ ДИНАМИЧЕСКОЕ ИМЯ
             true // playSound
         );
     }
@@ -265,7 +283,6 @@ protected cb func OnInitialize() -> Bool {
     if IsDefined(player) {
         let syst = PhoneExtensionSystem.GetInstance(player);
 
-        // Создаем контакт только один раз
         if !IsDefined(this.m_chataiContact) {
             this.m_chataiContact = new ChataiPhoneContact();
             this.m_chataiContact.Init(player as PlayerPuppet);
