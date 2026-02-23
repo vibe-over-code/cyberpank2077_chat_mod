@@ -5,12 +5,9 @@ local lastJson = nil
 local pendingJson = nil
 local storageReady = false
 
-local last_msg_id = nil -- защита от повторных уведомлений
+local last_msg_id = nil
 
-
---------------------------------------------------------------------
 -- AUTORUN GENERATOR VIA BAT
---------------------------------------------------------------------
 local function launch_generator()
     if is_launched then return end
     
@@ -19,8 +16,6 @@ local function launch_generator()
     -- В CET os.execute часто заблокирован. 
     -- Используем pcall, чтобы игра не вылетала, если метод недоступен
     pcall(function()
-        -- Мы используем команду 'start', чтобы запустить батник и сразу забыть о нем
-        -- Это не блокирует поток игры
         os.execute('start "" "' .. generator_bat .. '"')
     end)
     
@@ -28,9 +23,7 @@ local function launch_generator()
 end
 
 
---------------------------------------------------------------------
 -- CLEANER: оставляет только JSON-блок { ... }
---------------------------------------------------------------------
 local function extract_json_block(s)
     if not s or s == "" then return "" end
 
@@ -42,9 +35,8 @@ local function extract_json_block(s)
 end
 
 
---------------------------------------------------------------------
 -- JSON DECODER
---------------------------------------------------------------------
+
 local function json_decode(str)
     str = extract_json_block(str)
     if str == "" then return nil end
@@ -146,9 +138,7 @@ local function json_decode(str)
 end
 
 
---------------------------------------------------------------------
 -- Получение ChataiStorage
---------------------------------------------------------------------
 local function getStorage()
     local cont = Game.GetScriptableSystemsContainer()
     if not cont then return nil end
@@ -156,9 +146,7 @@ local function getStorage()
 end
 
 
---------------------------------------------------------------------
--- Отправка JSON → Redscript
---------------------------------------------------------------------
+-- Отправка JSON - Redscript
 local function sendToStorage(raw)
     local storage = getStorage()
     if not storage then return false end
@@ -191,9 +179,7 @@ local function sendToStorage(raw)
 
     print("[CHATAI] Data synced.")
 
-    ----------------------------------------------------------------
-    -- УМНОЕ УВЕДОМЛЕНИЕ (без спама)
-    ----------------------------------------------------------------
+    -- уведомление
     local current_id = data.msg_id or npcText
 
     if current_id ~= last_msg_id then
@@ -208,9 +194,7 @@ local function sendToStorage(raw)
 end
 
 
---------------------------------------------------------------------
 -- EVENTS
---------------------------------------------------------------------
 registerForEvent("onInit", function()
     launch_generator()
 end)
